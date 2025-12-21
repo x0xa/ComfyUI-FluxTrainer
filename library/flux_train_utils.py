@@ -84,8 +84,9 @@ def sample_images(
 
     with torch.no_grad(), accelerator.autocast():
         image_tensor_list = []
+        sample_images_info = []
         for prompt_dict in prompts:
-            image_tensor = sample_image_inference(
+            image_tensor, image_path, prompt = sample_image_inference(
                 accelerator,
                 args,
                 flux,
@@ -100,13 +101,14 @@ def sample_images(
                 validation_settings
             )
             image_tensor_list.append(image_tensor)
+            sample_images_info.append({"image_path": image_path, "prompt": prompt})
 
     torch.set_rng_state(rng_state)
     if cuda_rng_state is not None:
         torch.cuda.set_rng_state(cuda_rng_state)
 
     clean_memory_on_device(accelerator.device)
-    return torch.cat(image_tensor_list, dim=0)
+    return torch.cat(image_tensor_list, dim=0), sample_images_info
 
 
 def sample_image_inference(
@@ -244,8 +246,9 @@ def sample_image_inference(
     seed_suffix = "" if seed is None else f"_{seed}"
     i: int = prompt_dict["enum"]
     img_filename = f"{'' if args.output_name is None else args.output_name + '_'}{num_suffix}_{i:02d}_{ts_str}{seed_suffix}.png"
-    image.save(os.path.join(save_dir, img_filename))
-    return x
+    image_path = os.path.join(save_dir, img_filename)
+    image.save(image_path)
+    return x, image_path, prompt
 
     # wandb有効時のみログを送信
     # try:

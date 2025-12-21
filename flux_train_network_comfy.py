@@ -243,11 +243,11 @@ class FluxNetworkTrainer(NetworkTrainer):
 
     def sample_images(self, epoch, global_step, validation_settings):
         text_encoders = self.get_models_for_text_encoding(self.args, self.accelerator, self.text_encoder)
-        
-        image_tensors = flux_train_utils.sample_images(
+
+        image_tensors, sample_images_info = flux_train_utils.sample_images(
         self.accelerator, self.args, epoch, global_step, self.unet, self.vae, text_encoders, self.sample_prompts_te_outputs, validation_settings)
         clean_memory_on_device(self.accelerator.device)
-        return image_tensors
+        return image_tensors, sample_images_info
 
     def get_noise_scheduler(self, args: argparse.Namespace, device: torch.device) -> Any:
         noise_scheduler = sd3_train_utils.FlowMatchEulerDiscreteScheduler(num_train_timesteps=1000, shift=args.discrete_flow_shift)

@@ -33,6 +33,12 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+try:
+    from server import PromptServer
+    HAS_PROMPT_SERVER = True
+except ImportError:
+    HAS_PROMPT_SERVER = False
+
 class FluxTrainModelSelect:
     @classmethod
     def INPUT_TYPES(s):
@@ -961,13 +967,26 @@ class FluxTrainAndValidateLoop:
                     epoch=network_trainer.current_epoch.value,
                 )
 
+                sample_images_info = None
+                model_path = None
+
                 # Check if we need to validate
                 if network_trainer.global_step % validate_at_steps == 0:
-                    self.validate(network_trainer, validation_settings)
+                    sample_images_info = self.validate(network_trainer, validation_settings)
 
                 # Check if we need to save
                 if network_trainer.global_step % save_at_steps == 0:
-                    self.save(network_trainer)
+                    model_path = self.save(network_trainer)
+
+                # Send checkpoint info via websocket after validate and/or save
+                if (sample_images_info is not None or model_path is not None) and HAS_PROMPT_SERVER and PromptServer.instance is not None:
+                    PromptServer.instance.send_sync("flux_trainer.checkpoint", {
+                        "global_step": network_trainer.global_step,
+                        "epoch": network_trainer.current_epoch.value,
+                        "avg_loss": network_trainer.loss_recorder.moving_average,
+                        "model_path": model_path,
+                        "sample_images": sample_images_info,
+                    })
 
                 # Also break if the global steps have reached the max train steps
                 if network_trainer.global_step >= network_trainer.args.max_train_steps:
@@ -980,22 +999,25 @@ class FluxTrainAndValidateLoop:
         return (trainer, network_trainer.global_step)
 
     def validate(self, network_trainer, validation_settings=None):
-        params = ( 
-            network_trainer.current_epoch.value, 
+        params = (
+            network_trainer.current_epoch.value,
             network_trainer.global_step,
             validation_settings
         )
         network_trainer.optimizer_eval_fn()
-        image_tensors = network_trainer.sample_images(*params)
+        image_tensors, sample_images_info = network_trainer.sample_images(*params)
         network_trainer.optimizer_train_fn()
         print("Validating at step:", network_trainer.global_step)
+        return sample_images_info
 
     def save(self, network_trainer):
         ckpt_name = train_util.get_step_ckpt_name(network_trainer.args, "." + network_trainer.args.save_model_as, network_trainer.global_step)
         network_trainer.optimizer_eval_fn()
         network_trainer.save_model(ckpt_name, network_trainer.accelerator.unwrap_model(network_trainer.network), network_trainer.global_step, network_trainer.current_epoch.value + 1)
         network_trainer.optimizer_train_fn()
+        model_path = os.path.join(network_trainer.args.output_dir, ckpt_name)
         print("Saving at step:", network_trainer.global_step)
+        return model_path
 
 class FluxTrainSave:
     @classmethod
@@ -1017,7 +1039,7 @@ class FluxTrainSave:
         with torch.inference_mode(False):
             trainer = network_trainer["network_trainer"]
             global_step = trainer.global_step
-            
+
             ckpt_name = train_util.get_step_ckpt_name(trainer.args, "." + trainer.args.save_model_as, global_step)
             trainer.save_model(ckpt_name, trainer.accelerator.unwrap_model(trainer.network), global_step, trainer.current_epoch.value + 1)
 
@@ -1034,8 +1056,10 @@ class FluxTrainSave:
                 destination_dir = os.path.join(folder_paths.models_dir, "loras", "flux_trainer")
                 os.makedirs(destination_dir, exist_ok=True)
                 shutil.copy(lora_path, os.path.join(destination_dir, ckpt_name))
-        
-            
+
+            # Store model path for later websocket notification
+            trainer.last_model_path = lora_path
+
         return (network_trainer, lora_path, global_step)
 
 class FluxTrainSaveModel:
@@ -1252,14 +1276,27 @@ class FluxTrainValidate:
         training_loop = network_trainer["training_loop"]
         network_trainer = network_trainer["network_trainer"]
 
-        params = ( 
-            network_trainer.current_epoch.value, 
+        params = (
+            network_trainer.current_epoch.value,
             network_trainer.global_step,
             validation_settings
         )
         network_trainer.optimizer_eval_fn()
         with torch.inference_mode(False):
-            image_tensors = network_trainer.sample_images(*params)
+            image_tensors, sample_images_info = network_trainer.sample_images(*params)
+
+        # Send checkpoint info via websocket
+        if HAS_PROMPT_SERVER and PromptServer.instance is not None:
+            model_path = getattr(network_trainer, 'last_model_path', None)
+            PromptServer.instance.send_sync("flux_trainer.checkpoint", {
+                "global_step": network_trainer.global_step,
+                "epoch": network_trainer.current_epoch.value,
+                "avg_loss": network_trainer.loss_recorder.moving_average,
+                "model_path": model_path,
+                "sample_images": sample_images_info,
+            })
+            # Clear stored model path
+            network_trainer.last_model_path = None
 
         trainer = {
             "network_trainer": network_trainer,

@@ -48,12 +48,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-try:
-    from server import PromptServer
-    HAS_PROMPT_SERVER = True
-except ImportError:
-    HAS_PROMPT_SERVER = False
-
 
 class NetworkTrainer:
     def __init__(self):
@@ -1317,16 +1311,6 @@ class NetworkTrainer:
                         args, current_loss, avr_loss, lr_scheduler, lr_descriptions, optimizer, keys_scaled, mean_norm, maximum_norm
                     )
                     accelerator.log(logs, step=self.global_step)
-
-                # Send training metrics via websocket
-                if HAS_PROMPT_SERVER and PromptServer.instance is not None:
-                    PromptServer.instance.send_sync("flux_trainer.training_metrics", {
-                        "avg_loss": avr_loss,
-                        "current_loss": current_loss,
-                        "global_step": self.global_step,
-                        "epoch": epoch + 1,
-                        "max_train_steps": args.max_train_steps,
-                    })
 
                 if self.global_step >= break_at_steps:
                     break
