@@ -45,6 +45,12 @@ from .library.config_util import (
 )
 from .library.custom_train_functions import apply_masked_loss, add_custom_train_arguments
 
+try:
+    from server import PromptServer
+    HAS_PROMPT_SERVER = True
+except ImportError:
+    HAS_PROMPT_SERVER = False
+
 
 class FluxTrainer:
     def __init__(self):
@@ -747,6 +753,16 @@ class FluxTrainer:
                 avr_loss: float = self.loss_recorder.moving_average
                 logs = {"avr_loss": avr_loss}  # , "lr": lr_scheduler.get_last_lr()[0]}
                 progress_bar.set_postfix(**logs)
+
+                # Send training metrics via websocket
+                if HAS_PROMPT_SERVER and PromptServer.instance is not None:
+                    PromptServer.instance.send_sync("flux_trainer.training_metrics", {
+                        "avg_loss": avr_loss,
+                        "current_loss": current_loss,
+                        "global_step": self.global_step,
+                        "epoch": epoch + 1,
+                        "max_train_steps": args.max_train_steps,
+                    })
 
                 if self.global_step >= break_at_steps:
                     break
