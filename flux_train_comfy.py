@@ -473,21 +473,22 @@ class FluxTrainer:
 
         clean_memory_on_device(accelerator.device)
 
-        if args.deepspeed:
-            ds_model = deepspeed_utils.prepare_deepspeed_model(args, mmdit=flux)
-            # most of ZeRO stage uses optimizer partitioning, so we have to prepare optimizer and ds_model at the same time. # pull/1139#issuecomment-1986790007
-            ds_model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-                ds_model, optimizer, train_dataloader, lr_scheduler
-            )
-            training_models = [ds_model]
+        with ProgressNotifier("Preparing models with accelerator..."):
+            if args.deepspeed:
+                ds_model = deepspeed_utils.prepare_deepspeed_model(args, mmdit=flux)
+                # most of ZeRO stage uses optimizer partitioning, so we have to prepare optimizer and ds_model at the same time. # pull/1139#issuecomment-1986790007
+                ds_model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                    ds_model, optimizer, train_dataloader, lr_scheduler
+                )
+                training_models = [ds_model]
 
-        else:
-            # accelerator does some magic
-            # if we doesn't swap blocks, we can move the model to device
-            flux = accelerator.prepare(flux, device_placement=[not self.is_swapping_blocks])
-            if self.is_swapping_blocks:
-                accelerator.unwrap_model(flux).move_to_device_except_swap_blocks(accelerator.device)  # reduce peak memory usage
-            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(optimizer, train_dataloader, lr_scheduler)
+            else:
+                # accelerator does some magic
+                # if we doesn't swap blocks, we can move the model to device
+                flux = accelerator.prepare(flux, device_placement=[not self.is_swapping_blocks])
+                if self.is_swapping_blocks:
+                    accelerator.unwrap_model(flux).move_to_device_except_swap_blocks(accelerator.device)  # reduce peak memory usage
+                optimizer, train_dataloader, lr_scheduler = accelerator.prepare(optimizer, train_dataloader, lr_scheduler)
 
         # 実験的機能：勾配も含めたfp16学習を行う　PyTorchにパッチを当ててfp16でのgrad scaleを有効にする
         if args.full_fp16:

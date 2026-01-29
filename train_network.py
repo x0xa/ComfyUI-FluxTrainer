@@ -673,31 +673,33 @@ class NetworkTrainer:
                 text_encoder2=(text_encoders[1] if flags[1] else None) if len(text_encoders) > 1 else None,
                 network=network,
             )
-            ds_model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-                ds_model, optimizer, train_dataloader, lr_scheduler
-            )
+            with ProgressNotifier("Preparing models with accelerator..."):
+                ds_model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                    ds_model, optimizer, train_dataloader, lr_scheduler
+                )
             training_model = ds_model
         else:
-            if train_unet:
-                # default implementation is:  unet = accelerator.prepare(unet)
-                unet = self.prepare_unet_with_accelerator(args, accelerator, unet)  # accelerator does some magic here
-            else:
-                unet.to(accelerator.device, dtype=unet_weight_dtype)  # move to device because unet is not prepared by accelerator
-            if train_text_encoder:
-                text_encoders = [
-                    (accelerator.prepare(t_enc) if flag else t_enc)
-                    for t_enc, flag in zip(text_encoders, self.get_text_encoders_train_flags(args, text_encoders))
-                ]
-                if len(text_encoders) > 1:
-                    text_encoder = text_encoders
+            with ProgressNotifier("Preparing models with accelerator..."):
+                if train_unet:
+                    # default implementation is:  unet = accelerator.prepare(unet)
+                    unet = self.prepare_unet_with_accelerator(args, accelerator, unet)  # accelerator does some magic here
                 else:
-                    text_encoder = text_encoders[0]
-            else:
-                pass  # if text_encoder is not trained, no need to prepare. and device and dtype are already set
+                    unet.to(accelerator.device, dtype=unet_weight_dtype)  # move to device because unet is not prepared by accelerator
+                if train_text_encoder:
+                    text_encoders = [
+                        (accelerator.prepare(t_enc) if flag else t_enc)
+                        for t_enc, flag in zip(text_encoders, self.get_text_encoders_train_flags(args, text_encoders))
+                    ]
+                    if len(text_encoders) > 1:
+                        text_encoder = text_encoders
+                    else:
+                        text_encoder = text_encoders[0]
+                else:
+                    pass  # if text_encoder is not trained, no need to prepare. and device and dtype are already set
 
-            network, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-                network, optimizer, train_dataloader, lr_scheduler
-            )
+                network, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                    network, optimizer, train_dataloader, lr_scheduler
+                )
             training_model = network
 
         if args.gradient_checkpointing:

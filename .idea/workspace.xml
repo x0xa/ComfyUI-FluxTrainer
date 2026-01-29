@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="d2f9b1fa-1688-4072-b64e-18f997604e36" name="Changes" comment="Adds progress" />
     <option name="SHOW_DIALOG" value="false" />
@@ -61,6 +64,13 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecapSpentCounter">
+    <option name="endsOfQuotaMs" value="1771230736188" />
+    <option name="spentUsd" value="0.0025895" />
+  </component>
+  <component name="RecapUselessUpdatesCounter">
+    <option name="suspendCountdown" value="9" />
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -77,7 +87,7 @@
       <option name="presentableId" value="Default" />
       <updated>1769700099795</updated>
       <workItem from="1769700103927" duration="257000" />
-      <workItem from="1769707609668" duration="345000" />
+      <workItem from="1769707609668" duration="683000" />
     </task>
     <task id="LOCAL-00001" summary="Adds progress">
       <option name="closed" value="true" />
@@ -95,7 +105,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769707651419</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Adds progress">
+      <option name="closed" value="true" />
+      <created>1769708581304</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1769708581304</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
