@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d2f9b1fa-1688-4072-b64e-18f997604e36" name="Changes" comment="Adds progress" />
+    <list default="true" id="d2f9b1fa-1688-4072-b64e-18f997604e36" name="Changes" comment="Adds progress">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flux_train_comfy.py" beforeDir="false" afterPath="$PROJECT_DIR$/flux_train_comfy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_network.py" beforeDir="false" afterPath="$PROJECT_DIR$/train_network.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -87,7 +91,7 @@
       <option name="presentableId" value="Default" />
       <updated>1769700099795</updated>
       <workItem from="1769700103927" duration="257000" />
-      <workItem from="1769707609668" duration="1016000" />
+      <workItem from="1769707609668" duration="1806000" />
     </task>
     <task id="LOCAL-00001" summary="Adds progress">
       <option name="closed" value="true" />
@@ -121,7 +125,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769708920547</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="Adds progress">
+      <option name="closed" value="true" />
+      <created>1769709376456</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1769709376456</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

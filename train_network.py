@@ -702,8 +702,6 @@ class NetworkTrainer:
                 )
             training_model = network
 
-        send_progress("Finalizing training setup...")
-
         if args.gradient_checkpointing:
             # according to TI example in Diffusers, train is required
             unet.train()
@@ -721,7 +719,6 @@ class NetworkTrainer:
 
         del t_enc
 
-        send_progress("Preparing network gradients...")
         accelerator.unwrap_model(network).prepare_grad_etc(text_encoder, unet)
 
         if not cache_latents:  # If you do not cache, VAE will be used, so enable VAE preparation.
@@ -780,13 +777,11 @@ class NetworkTrainer:
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
 
-        send_progress("Checking for resume state...")
         # resume from local or huggingface
         train_util.resume_from_local_or_hf_if_specified(accelerator, args)
 
         pbar.update(1)
 
-        send_progress("Calculating training parameters...")
         # Calculate the number of epochs
         num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
         num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
@@ -1007,16 +1002,18 @@ class NetworkTrainer:
         if args.pretrained_model_name_or_path is not None:
             sd_model_name = args.pretrained_model_name_or_path
             if os.path.exists(sd_model_name):
-                metadata["ss_sd_model_hash"] = train_util.model_hash(sd_model_name)
-                metadata["ss_new_sd_model_hash"] = train_util.calculate_sha256(sd_model_name)
+                with ProgressNotifier("Calculating model hashes..."):
+                    metadata["ss_sd_model_hash"] = train_util.model_hash(sd_model_name)
+                    metadata["ss_new_sd_model_hash"] = train_util.calculate_sha256(sd_model_name)
                 sd_model_name = os.path.basename(sd_model_name)
             metadata["ss_sd_model_name"] = sd_model_name
 
         if args.vae is not None:
             vae_name = args.vae
             if os.path.exists(vae_name):
-                metadata["ss_vae_hash"] = train_util.model_hash(vae_name)
-                metadata["ss_new_vae_hash"] = train_util.calculate_sha256(vae_name)
+                with ProgressNotifier("Calculating VAE hashes..."):
+                    metadata["ss_vae_hash"] = train_util.model_hash(vae_name)
+                    metadata["ss_new_vae_hash"] = train_util.calculate_sha256(vae_name)
                 vae_name = os.path.basename(vae_name)
             metadata["ss_vae_name"] = vae_name
 
