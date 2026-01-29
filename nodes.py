@@ -14,7 +14,7 @@ import shlex
 from pathlib import Path
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
-from .flux_train_network_comfy import FluxNetworkTrainer
+from .flux_train_network_comfy import FluxNetworkTrainer, send_progress
 from .library import flux_train_utils as  flux_train_utils
 from .flux_train_comfy import FluxTrainer
 from .flux_train_comfy import setup_parser as train_setup_parser
@@ -635,28 +635,10 @@ class InitFluxLoRATraining:
             json.dump(metadata, f, indent=4)
 
         #pass args to kohya and initialize trainer
-        if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
-            try:
-                PromptServer.instance.send_sync("progress", {"message": "Initializing trainer..."})
-            except:
-                pass
-
         with torch.inference_mode(False):
             network_trainer = FluxNetworkTrainer()
-
-            if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
-                try:
-                    PromptServer.instance.send_sync("progress", {"message": "Starting model initialization..."})
-                except:
-                    pass
-
             training_loop = network_trainer.init_train(args)
-
-            if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
-                try:
-                    PromptServer.instance.send_sync("progress", {"message": "Trainer initialization completed"})
-                except:
-                    pass
+            send_progress("Trainer initialization completed")
 
         epochs_count = network_trainer.num_train_epochs
 
@@ -815,9 +797,9 @@ class InitFluxTraining:
         with torch.inference_mode(False):
             network_trainer = FluxTrainer()
             training_loop = network_trainer.init_train(args)
+            send_progress("Trainer initialization completed")
 
         epochs_count = network_trainer.num_train_epochs
-
 
         saved_args_file_path = os.path.join(output_dir, f"{output_name}_args.json")
         with open(saved_args_file_path, 'w') as f:
@@ -894,6 +876,7 @@ class InitFluxTrainingFromPreset:
         with torch.inference_mode(False):
             network_trainer = FluxNetworkTrainer()
             training_loop = network_trainer.init_train(args)
+            send_progress("Trainer initialization completed")
 
         final_output_path = os.path.join(output_dir, output_name)
 

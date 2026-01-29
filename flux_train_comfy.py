@@ -44,6 +44,7 @@ from .library.config_util import (
     BlueprintGenerator,
 )
 from .library.custom_train_functions import apply_masked_loss, add_custom_train_arguments
+from .flux_train_network_comfy import ProgressNotifier, send_progress
 
 
 class FluxTrainer:
@@ -191,7 +192,8 @@ class FluxTrainer:
         # load VAE for caching latents
         ae = None
         if cache_latents:
-            ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
+            with ProgressNotifier("Loading VAE for caching latents..."):
+                ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
             ae.to(accelerator.device, dtype=weight_dtype)
             ae.requires_grad_(False)
             ae.eval()
@@ -216,12 +218,14 @@ class FluxTrainer:
         strategy_base.TokenizeStrategy.set_strategy(flux_tokenize_strategy)
 
         # load clip_l, t5xxl for caching text encoder outputs
-        clip_l = flux_utils.load_clip_l(args.clip_l, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
-        t5xxl = flux_utils.load_t5xxl(args.t5xxl, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
-        clip_l.eval()
-        t5xxl.eval()
-        clip_l.requires_grad_(False)
-        t5xxl.requires_grad_(False)
+        with ProgressNotifier("Loading CLIP-L text encoder..."):
+            clip_l = flux_utils.load_clip_l(args.clip_l, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
+            clip_l.eval()
+            clip_l.requires_grad_(False)
+        with ProgressNotifier("Loading T5-XXL text encoder..."):
+            t5xxl = flux_utils.load_t5xxl(args.t5xxl, weight_dtype, "cpu", args.disable_mmap_load_safetensors)
+            t5xxl.eval()
+            t5xxl.requires_grad_(False)
 
         text_encoding_strategy = strategy_flux.FluxTextEncodingStrategy(args.apply_t5_attn_mask)
         strategy_base.TextEncodingStrategy.set_strategy(text_encoding_strategy)
@@ -286,9 +290,10 @@ class FluxTrainer:
             clean_memory_on_device(accelerator.device)
 
         # load FLUX
-        _, flux = flux_utils.load_flow_model(
-            args.pretrained_model_name_or_path, weight_dtype, "cpu", args.disable_mmap_load_safetensors
-        )
+        with ProgressNotifier("Loading FLUX transformer model..."):
+            _, flux = flux_utils.load_flow_model(
+                args.pretrained_model_name_or_path, weight_dtype, "cpu", args.disable_mmap_load_safetensors
+            )
 
         if args.gradient_checkpointing:
             flux.enable_gradient_checkpointing(cpu_offload=args.cpu_offload_checkpointing)
@@ -322,10 +327,11 @@ class FluxTrainer:
 
         if not cache_latents:
             # load VAE here if not cached
-            ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu")
-            ae.requires_grad_(False)
-            ae.eval()
-            ae.to(accelerator.device, dtype=weight_dtype)
+            with ProgressNotifier("Loading VAE..."):
+                ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu")
+                ae.requires_grad_(False)
+                ae.eval()
+                ae.to(accelerator.device, dtype=weight_dtype)
 
         training_models = []
         params_to_optimize = []

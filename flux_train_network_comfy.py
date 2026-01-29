@@ -1,6 +1,7 @@
 import torch
 import copy
 import math
+import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import argparse
 from .library import flux_models, flux_train_utils, flux_utils, sd3_train_utils, strategy_base, strategy_flux, train_util
@@ -15,8 +16,11 @@ except ImportError:
     HAS_PROMPT_SERVER = False
 
 import logging
+import threading
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+_progress_interval = 5.0
 
 def send_progress(message: str):
     """Send progress update via WebSocket if available"""
@@ -28,6 +32,33 @@ def send_progress(message: str):
             logger.warning(f"[Flux Trainer] Failed to send progress: {e}")
     else:
         logger.info(f"[Flux Trainer] {message}")
+
+class ProgressNotifier:
+    """Sends progress updates via WebSocket every N seconds during long operations"""
+
+    def __init__(self, message: str, interval: float = _progress_interval):
+        self.message = message
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.thread = None
+
+    def __enter__(self):
+        send_progress(self.message)
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._loop)
+        self.thread.daemon = True
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop_event.set()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2)
+        return False
+
+    def _loop(self):
+        while not self.stop_event.wait(self.interval):
+            send_progress(self.message)
 
 class FluxNetworkTrainer(NetworkTrainer):
     def __init__(self):
@@ -74,11 +105,10 @@ class FluxNetworkTrainer(NetworkTrainer):
         loading_dtype = None if args.fp8_base else weight_dtype
 
         # if we load to cpu, flux.to(fp8) takes a long time, so we should load to gpu in future
-        send_progress("Loading FLUX transformer model...")
-        self.is_schnell, model = flux_utils.load_flow_model(
-            args.pretrained_model_name_or_path, loading_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors
-        )
-        send_progress("FLUX transformer model loaded")
+        with ProgressNotifier("Loading FLUX transformer model..."):
+            self.is_schnell, model = flux_utils.load_flow_model(
+                args.pretrained_model_name_or_path, loading_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors
+            )
 
         if args.fp8_base:
             # check dtype of model
@@ -91,14 +121,12 @@ class FluxNetworkTrainer(NetworkTrainer):
         if self.is_swapping_blocks:
             # Swap blocks between CPU and GPU to reduce memory usage, in forward and backward passes.
             logger.info(f"enable block swap: blocks_to_swap={args.blocks_to_swap}")
-            send_progress("Enabling block swapping...")
-            model.enable_block_swap(args.blocks_to_swap, accelerator.device)
-            send_progress("Block swapping enabled")
+            with ProgressNotifier("Enabling block swapping..."):
+                model.enable_block_swap(args.blocks_to_swap, accelerator.device)
 
-        send_progress("Loading CLIP-L text encoder...")
-        clip_l = flux_utils.load_clip_l(args.clip_l, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
-        clip_l.eval()
-        send_progress("CLIP-L text encoder loaded")
+        with ProgressNotifier("Loading CLIP-L text encoder..."):
+            clip_l = flux_utils.load_clip_l(args.clip_l, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
+            clip_l.eval()
 
         # if the file is fp8 and we are using fp8_base (not unet), we can load it as is (fp8)
         if args.fp8_base and not args.fp8_base_unet:
@@ -107,10 +135,9 @@ class FluxNetworkTrainer(NetworkTrainer):
             loading_dtype = weight_dtype
 
         # loading t5xxl to cpu takes a long time, so we should load to gpu in future
-        send_progress("Loading T5-XXL text encoder...")
-        t5xxl = flux_utils.load_t5xxl(args.t5xxl, loading_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
-        t5xxl.eval()
-        send_progress("T5-XXL text encoder loaded")
+        with ProgressNotifier("Loading T5-XXL text encoder..."):
+            t5xxl = flux_utils.load_t5xxl(args.t5xxl, loading_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
+            t5xxl.eval()
 
         if args.fp8_base and not args.fp8_base_unet:
             # check dtype of model
@@ -119,9 +146,8 @@ class FluxNetworkTrainer(NetworkTrainer):
             elif t5xxl.dtype == torch.float8_e4m3fn:
                 logger.info("Loaded fp8 T5XXL model")
 
-        send_progress("Loading VAE...")
-        ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
-        send_progress("VAE loaded")
+        with ProgressNotifier("Loading VAE..."):
+            ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
 
         send_progress("All models loaded successfully")
 
