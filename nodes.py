@@ -635,9 +635,28 @@ class InitFluxLoRATraining:
             json.dump(metadata, f, indent=4)
 
         #pass args to kohya and initialize trainer
+        if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
+            try:
+                PromptServer.instance.send_sync("progress", {"message": "Initializing trainer..."})
+            except:
+                pass
+
         with torch.inference_mode(False):
             network_trainer = FluxNetworkTrainer()
+
+            if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
+                try:
+                    PromptServer.instance.send_sync("progress", {"message": "Starting model initialization..."})
+                except:
+                    pass
+
             training_loop = network_trainer.init_train(args)
+
+            if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
+                try:
+                    PromptServer.instance.send_sync("progress", {"message": "Trainer initialization completed"})
+                except:
+                    pass
 
         epochs_count = network_trainer.num_train_epochs
 

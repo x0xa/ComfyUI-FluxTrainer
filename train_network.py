@@ -13,6 +13,12 @@ import toml
 from tqdm import tqdm
 from comfy.utils import ProgressBar
 
+try:
+    from server import PromptServer
+    HAS_PROMPT_SERVER = True
+except ImportError:
+    HAS_PROMPT_SERVER = False
+
 import torch
 from .library.device_utils import init_ipex, clean_memory_on_device
 
@@ -1316,6 +1322,24 @@ class NetworkTrainer:
                     break
                 steps_done += 1
                 self.comfy_pbar.update(1)
+
+                # Send structured progress data via WebSocket
+                if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
+                    try:
+                        progress_percentage = (self.global_step / args.max_train_steps) * 100 if args.max_train_steps > 0 else 0
+                        PromptServer.instance.send_sync("progress", {
+                            "progressData": {
+                                "completedSteps": self.global_step,
+                                "totalSteps": args.max_train_steps,
+                                "completedEpochs": self.current_epoch.value,
+                                "totalEpochs": self.num_train_epochs,
+                                "progressPercentage": round(min(progress_percentage, 100), 2),
+                                "avgLoss": self.loss_recorder.moving_average,
+                                "currentLoss": current_loss.item() if hasattr(current_loss, 'item') else current_loss,
+                            }
+                        })
+                    except Exception as e:
+                        pass
 
             if len(accelerator.trackers) > 0:
                 logs = {"loss/epoch": self.loss_recorder.moving_average}
