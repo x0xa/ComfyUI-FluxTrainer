@@ -44,7 +44,7 @@ from .library.config_util import (
     BlueprintGenerator,
 )
 from .library.custom_train_functions import apply_masked_loss, add_custom_train_arguments
-from .flux_train_network_comfy import ProgressNotifier, send_progress
+from .library.progress import send_progress, ProgressNotifier
 
 
 class FluxTrainer:
@@ -198,7 +198,8 @@ class FluxTrainer:
             ae.requires_grad_(False)
             ae.eval()
 
-            train_dataset_group.new_cache_latents(ae, accelerator)
+            with ProgressNotifier("Caching latents..."):
+                train_dataset_group.new_cache_latents(ae, accelerator)
 
             ae.to("cpu")  # if no sampling, vae can be deleted
             clean_memory_on_device(accelerator.device)
@@ -242,8 +243,9 @@ class FluxTrainer:
             )
             strategy_base.TextEncoderOutputsCachingStrategy.set_strategy(text_encoder_caching_strategy)
 
-            with accelerator.autocast():
-                train_dataset_group.new_cache_text_encoder_outputs([clip_l, t5xxl], accelerator)
+            with ProgressNotifier("Caching text encoder outputs..."):
+                with accelerator.autocast():
+                    train_dataset_group.new_cache_text_encoder_outputs([clip_l, t5xxl], accelerator)
 
             # cache sample prompt's embeddings to free text encoder's memory
             if args.sample_prompts is not None:
@@ -351,6 +353,7 @@ class FluxTrainer:
 
         # 学習に必要なクラスを準備する
         accelerator.print("prepare optimizer, data loader etc.")
+        send_progress("Preparing optimizer and data loader...")
 
         if args.blockwise_fused_optimizers:
             # fused backward pass: https://pytorch.org/tutorials/intermediate/optimizer_step_in_backward_tutorial.html

@@ -1,64 +1,16 @@
 import torch
 import copy
 import math
-import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import argparse
 from .library import flux_models, flux_train_utils, flux_utils, sd3_train_utils, strategy_base, strategy_flux, train_util
+from .library.progress import send_progress, ProgressNotifier
 from .train_network import NetworkTrainer, clean_memory_on_device, setup_parser
 
 from accelerate import Accelerator
 
-try:
-    from server import PromptServer
-    HAS_PROMPT_SERVER = True
-except ImportError:
-    HAS_PROMPT_SERVER = False
-
 import logging
-import threading
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-_progress_interval = 5.0
-
-def send_progress(message: str):
-    """Send progress update via WebSocket if available"""
-    if HAS_PROMPT_SERVER and hasattr(PromptServer, 'instance') and PromptServer.instance:
-        try:
-            PromptServer.instance.send_sync("progress", {"message": message})
-            logger.info(f"[Flux Trainer] {message}")
-        except Exception as e:
-            logger.warning(f"[Flux Trainer] Failed to send progress: {e}")
-    else:
-        logger.info(f"[Flux Trainer] {message}")
-
-class ProgressNotifier:
-    """Sends progress updates via WebSocket every N seconds during long operations"""
-
-    def __init__(self, message: str, interval: float = _progress_interval):
-        self.message = message
-        self.interval = interval
-        self.stop_event = threading.Event()
-        self.thread = None
-
-    def __enter__(self):
-        send_progress(self.message)
-        self.stop_event.clear()
-        self.thread = threading.Thread(target=self._loop)
-        self.thread.daemon = True
-        self.thread.start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop_event.set()
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2)
-        return False
-
-    def _loop(self):
-        while not self.stop_event.wait(self.interval):
-            send_progress(self.message)
 
 class FluxNetworkTrainer(NetworkTrainer):
     def __init__(self):
@@ -236,8 +188,9 @@ class FluxNetworkTrainer(NetworkTrainer):
                 # otherwise, we need to convert it to target dtype
                 text_encoders[1].to(weight_dtype)
 
-            with accelerator.autocast():
-                dataset.new_cache_text_encoder_outputs(text_encoders, accelerator)
+            with ProgressNotifier("Caching text encoder outputs..."):
+                with accelerator.autocast():
+                    dataset.new_cache_text_encoder_outputs(text_encoders, accelerator)
 
             # cache sample prompts
             if args.sample_prompts is not None:

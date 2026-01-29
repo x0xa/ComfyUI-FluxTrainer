@@ -14,7 +14,8 @@ import shlex
 from pathlib import Path
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
-from .flux_train_network_comfy import FluxNetworkTrainer, send_progress
+from .flux_train_network_comfy import FluxNetworkTrainer
+from .library.progress import send_progress
 from .library import flux_train_utils as  flux_train_utils
 from .flux_train_comfy import FluxTrainer
 from .flux_train_comfy import setup_parser as train_setup_parser

@@ -54,6 +54,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from .library.progress import send_progress, ProgressNotifier
+
 
 class NetworkTrainer:
     def __init__(self):
@@ -456,7 +458,8 @@ class NetworkTrainer:
             vae.requires_grad_(False)
             vae.eval()
 
-            train_dataset_group.new_cache_latents(vae, accelerator)
+            with ProgressNotifier("Caching latents..."):
+                train_dataset_group.new_cache_latents(vae, accelerator)
 
             vae.to("cpu")
             clean_memory_on_device(accelerator.device)
@@ -468,41 +471,43 @@ class NetworkTrainer:
         text_encoder_outputs_caching_strategy = self.get_text_encoder_outputs_caching_strategy(args)
         if text_encoder_outputs_caching_strategy is not None:
             strategy_base.TextEncoderOutputsCachingStrategy.set_strategy(text_encoder_outputs_caching_strategy)
-        self.cache_text_encoder_outputs_if_needed(args, accelerator, unet, vae, text_encoders, train_dataset_group, weight_dtype)
+        with ProgressNotifier("Caching text encoder outputs..."):
+            self.cache_text_encoder_outputs_if_needed(args, accelerator, unet, vae, text_encoders, train_dataset_group, weight_dtype)
 
         pbar.update(1)
 
         # prepare network
-        net_kwargs = {}
-        if args.network_args is not None:
-            for net_arg in args.network_args:
-                key, value = net_arg.split("=")
-                net_kwargs[key] = value
+        with ProgressNotifier("Creating LoRA network..."):
+            net_kwargs = {}
+            if args.network_args is not None:
+                for net_arg in args.network_args:
+                    key, value = net_arg.split("=")
+                    net_kwargs[key] = value
 
-        # if a new network is added in future, add if ~ then blocks for each network (;'∀')
-        if args.dim_from_weights:
-            network, _ = network_module.create_network_from_weights(1, args.network_weights, vae, text_encoder, unet, **net_kwargs)
-        else:
-            if "dropout" not in net_kwargs:
-                # workaround for LyCORIS (;^ω^)
-                net_kwargs["dropout"] = args.network_dropout
+            # if a new network is added in future, add if ~ then blocks for each network (;'∀')
+            if args.dim_from_weights:
+                network, _ = network_module.create_network_from_weights(1, args.network_weights, vae, text_encoder, unet, **net_kwargs)
+            else:
+                if "dropout" not in net_kwargs:
+                    # workaround for LyCORIS (;^ω^)
+                    net_kwargs["dropout"] = args.network_dropout
 
-            network = network_module.create_network(
-                1.0,
-                args.network_dim,
-                args.network_alpha,
-                vae,
-                text_encoder,
-                unet,
-                neuron_dropout=args.network_dropout,
-                **net_kwargs,
-            )
-        if network is None:
-            return
-        network_has_multiplier = hasattr(network, "set_multiplier")
+                network = network_module.create_network(
+                    1.0,
+                    args.network_dim,
+                    args.network_alpha,
+                    vae,
+                    text_encoder,
+                    unet,
+                    neuron_dropout=args.network_dropout,
+                    **net_kwargs,
+                )
+            if network is None:
+                return
+            network_has_multiplier = hasattr(network, "set_multiplier")
 
-        if hasattr(network, "prepare_network"):
-            network.prepare_network(args)
+            if hasattr(network, "prepare_network"):
+                network.prepare_network(args)
         if args.scale_weight_norms and not hasattr(network, "apply_max_norm_regularization"):
             logger.warning(
                 "warning: scale_weight_norms is specified but the network does not support it / scale_weight_normsが指定されていますが、ネットワークが対応していません"
@@ -536,6 +541,7 @@ class NetworkTrainer:
 
         # Prepare classes necessary for learning
         accelerator.print("prepare optimizer, data loader etc.")
+        send_progress("Preparing optimizer and data loader...")
 
         # make backward compatibility for text_encoder_lr
         support_multiple_lrs = hasattr(network, "prepare_optimizer_params_with_multiple_te_lrs")
