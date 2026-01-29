@@ -702,6 +702,8 @@ class NetworkTrainer:
                 )
             training_model = network
 
+        send_progress("Finalizing training setup...")
+
         if args.gradient_checkpointing:
             # according to TI example in Diffusers, train is required
             unet.train()
@@ -719,6 +721,7 @@ class NetworkTrainer:
 
         del t_enc
 
+        send_progress("Preparing network gradients...")
         accelerator.unwrap_model(network).prepare_grad_etc(text_encoder, unet)
 
         if not cache_latents:  # If you do not cache, VAE will be used, so enable VAE preparation.
@@ -777,11 +780,13 @@ class NetworkTrainer:
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
 
+        send_progress("Checking for resume state...")
         # resume from local or huggingface
         train_util.resume_from_local_or_hf_if_specified(accelerator, args)
 
         pbar.update(1)
 
+        send_progress("Calculating training parameters...")
         # Calculate the number of epochs
         num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
         num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
